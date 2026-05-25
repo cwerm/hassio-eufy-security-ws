@@ -107,6 +107,13 @@ check_version() {
 if bashio::config.has_value 'username' && bashio::config.has_value 'password'; then
     echo "$JSON_STRING" > $CONFIG_PATH
 
+    # Start the main eufy-security-ws server in the background
+    /usr/bin/node --security-revert=CVE-2023-46809 $IPV4_FIRST_NODE_OPTION /usr/src/app/node_modules/eufy-security-ws/dist/bin/server.js --host 0.0.0.0 --config $CONFIG_PATH $DEBUG_OPTION $PORT_OPTION &
+    MAIN_PID=$!
+
+    # Give the WS server a moment to bind its port before starting the sidecar
+    sleep 2
+
     # Start the 2FA helper sidecar
     TFA_PORT="3001"
     if bashio::config.has_value 'tfa_port'; then
@@ -117,9 +124,15 @@ if bashio::config.has_value 'username' && bashio::config.has_value 'password'; t
     export TFA_HTTP_PORT="${TFA_PORT}"
     export EUFY_WS_HOST="127.0.0.1"
     /usr/bin/node /usr/src/2fa-helper/server.js &
+    TFA_PID=$!
     bashio::log.info "2FA helper started on port ${TFA_PORT}"
 
-    exec /usr/bin/node --security-revert=CVE-2023-46809 $IPV4_FIRST_NODE_OPTION /usr/src/app/node_modules/eufy-security-ws/dist/bin/server.js --host 0.0.0.0 --config $CONFIG_PATH $DEBUG_OPTION $PORT_OPTION
+    # Wait for the main server — if it exits, clean up the sidecar and exit
+    wait ${MAIN_PID}
+    MAIN_EXIT=$?
+    kill ${TFA_PID} 2>/dev/null
+    wait ${TFA_PID} 2>/dev/null
+    exit ${MAIN_EXIT}
 else
     echo "Required parameters username and/or password not set. Starting aborted!"
 fi
