@@ -1,0 +1,13 @@
+{
+  "name": "eufy-2fa-helper",
+  "version": "1.0.0",
+  "description": "2FA verification helper for eufy-security-ws",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}

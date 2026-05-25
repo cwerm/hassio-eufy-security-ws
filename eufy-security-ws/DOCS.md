@@ -9,6 +9,7 @@
 | `polling_interval`    | Polling intervall for data refresh from Eufy Cloud in minutes (default: 10 min.)                    |
 | `accept_invitations`  | Automatically accept device invitations (default: false)                                            |
 | `port`                | Listening port on host (default: 3000)                                                              |
+| `tfa_port`            | Port for the 2FA verification web UI (default: 3001)                                                |
 | `stations`            | Suggested IP addresses or broadcast addresses for stations (optional)                               |
 | `trusted_device_name` | Label of the trusted devices (viewable with 2fa activated in Eufy App; default: random device name) |
 | `debug`               | Activates debug mode (default: false)                                                               |
@@ -42,6 +43,23 @@ Starting with v17, [Node.js no longer orders IPv4 addresses before IPv6 addresse
 
 If you stop receiving push notifications (and are seeing `create push credentials error` messages in the log that repeat endlessly), try setting this to `true`.
 
+## 2FA Verification
+
+If your Eufy account uses two-factor authentication, the add-on runs a helper web UI on `tfa_port` (default: 3001).
+
+1. Start the add-on. Check the logs — if 2FA is needed you'll see `"2FA verification code requested"`.
+2. Open `http://<your-ha-ip>:3001` in a browser.
+3. Enter the verification code and submit.
+4. The add-on completes authentication and persists the session. You typically only need to do this once.
+
+You can also submit the code via REST:
+
+```bash
+curl -X POST http://<your-ha-ip>:3001/verify \
+  -H "Content-Type: application/json" \
+  -d '{"code": "123456"}'
+```
+
 ## Example configuration in YAML
 
 ```yaml
@@ -49,6 +67,7 @@ username: mail@address.com
 password: password
 country: US
 port: 3000
+tfa_port: 3001
 polling_interval: 10
 accept_invitations: true
 debug: false

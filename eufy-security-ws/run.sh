@@ -106,6 +106,19 @@ check_version() {
 
 if bashio::config.has_value 'username' && bashio::config.has_value 'password'; then
     echo "$JSON_STRING" > $CONFIG_PATH
+
+    # Start the 2FA helper sidecar
+    TFA_PORT="3001"
+    if bashio::config.has_value 'tfa_port'; then
+        TFA_PORT="$(bashio::config 'tfa_port')"
+    fi
+    EUFY_PORT="$(bashio::config 'port')"
+    export EUFY_WS_PORT="${EUFY_PORT}"
+    export TFA_HTTP_PORT="${TFA_PORT}"
+    export EUFY_WS_HOST="127.0.0.1"
+    /usr/bin/node /usr/src/2fa-helper/server.js &
+    bashio::log.info "2FA helper started on port ${TFA_PORT}"
+
     exec /usr/bin/node --security-revert=CVE-2023-46809 $IPV4_FIRST_NODE_OPTION /usr/src/app/node_modules/eufy-security-ws/dist/bin/server.js --host 0.0.0.0 --config $CONFIG_PATH $DEBUG_OPTION $PORT_OPTION
 else
     echo "Required parameters username and/or password not set. Starting aborted!"
