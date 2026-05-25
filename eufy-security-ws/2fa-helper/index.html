@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Eufy Security - 2FA Verification</title>
+  <title>Eufy Security - Verification</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -23,7 +23,7 @@
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
       padding: 2.5rem;
       width: 100%;
-      max-width: 400px;
+      max-width: 420px;
     }
 
     .logo {
@@ -136,6 +136,11 @@
       color: #d1d5db;
     }
 
+    .captcha-input {
+      font-size: 1.25rem;
+      letter-spacing: 0.25rem;
+    }
+
     button {
       width: 100%;
       padding: 0.875rem;
@@ -198,6 +203,22 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+
+    .captcha-image {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .captcha-image img {
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      max-width: 100%;
+      background: white;
+    }
+
+    .hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -205,48 +226,110 @@
     <div class="logo">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v5.7c0 4.83-3.4 9.36-7 10.5-3.6-1.14-7-5.67-7-10.5V6.3l7-3.12zM11 7v2h2V7h-2zm0 4v6h2v-6h-2z"/></svg>
     </div>
-    <h1>2FA Verification</h1>
-    <p class="subtitle">Enter the verification code sent to your email or phone to complete Eufy Security authentication.</p>
+    <h1 id="title">Verification</h1>
+    <p class="subtitle" id="subtitle">Waiting for authentication challenge from Eufy Security...</p>
 
     <div id="statusBar" class="status-bar disconnected">
       <span class="status-dot"></span>
       <span id="statusText">Connecting...</span>
     </div>
 
-    <form id="verifyForm">
+    <!-- 2FA Code Form -->
+    <form id="tfaForm" class="hidden">
       <div class="input-group">
-        <label for="codeInput">Verification Code</label>
-        <input type="text" id="codeInput" maxlength="6" placeholder="000000" inputmode="numeric" pattern="\d*" autocomplete="one-time-code" autofocus>
+        <label for="tfaInput">Verification Code</label>
+        <input type="text" id="tfaInput" maxlength="6" placeholder="000000" inputmode="numeric" pattern="\d*" autocomplete="one-time-code">
       </div>
-      <button type="submit" id="submitBtn">Verify Code</button>
+      <button type="submit" id="tfaBtn">Verify Code</button>
+    </form>
+
+    <!-- Captcha Form -->
+    <form id="captchaForm" class="hidden">
+      <div class="captcha-image">
+        <img id="captchaImg" src="" alt="Captcha image">
+      </div>
+      <div class="input-group">
+        <label for="captchaInput">Enter the text shown above</label>
+        <input type="text" id="captchaInput" class="captcha-input" maxlength="20" placeholder="captcha" autocomplete="off">
+      </div>
+      <button type="submit" id="captchaBtn">Submit Captcha</button>
     </form>
 
     <div id="feedback" class="feedback"></div>
   </div>
 
   <script>
-    const form = document.getElementById('verifyForm');
-    const input = document.getElementById('codeInput');
-    const btn = document.getElementById('submitBtn');
+    const tfaForm = document.getElementById('tfaForm');
+    const captchaForm = document.getElementById('captchaForm');
+    const tfaInput = document.getElementById('tfaInput');
+    const captchaInput = document.getElementById('captchaInput');
+    const captchaImg = document.getElementById('captchaImg');
+    const tfaBtn = document.getElementById('tfaBtn');
+    const captchaBtn = document.getElementById('captchaBtn');
     const feedback = document.getElementById('feedback');
     const statusBar = document.getElementById('statusBar');
     const statusText = document.getElementById('statusText');
+    const title = document.getElementById('title');
+    const subtitle = document.getElementById('subtitle');
 
-    input.addEventListener('input', () => {
-      input.value = input.value.replace(/\D/g, '').slice(0, 6);
+    let currentMode = 'idle';
+
+    tfaInput.addEventListener('input', () => {
+      tfaInput.value = tfaInput.value.replace(/\D/g, '').slice(0, 6);
     });
+
+    function setMode(mode, data) {
+      currentMode = mode;
+      tfaForm.classList.add('hidden');
+      captchaForm.classList.add('hidden');
+      feedback.className = 'feedback';
+      feedback.style.display = 'none';
+
+      if (mode === 'tfa') {
+        title.textContent = '2FA Verification';
+        subtitle.textContent = 'Enter the verification code sent to your email or phone to complete authentication.';
+        tfaForm.classList.remove('hidden');
+        tfaInput.focus();
+      } else if (mode === 'captcha') {
+        title.textContent = 'Captcha Verification';
+        subtitle.textContent = 'Enter the text shown in the image below to verify you are human.';
+        captchaForm.classList.remove('hidden');
+        if (data?.captchaImage) {
+          captchaImg.src = data.captchaImage;
+        }
+        captchaInput.focus();
+      } else {
+        title.textContent = 'Verification';
+        subtitle.textContent = 'Waiting for authentication challenge from Eufy Security...';
+      }
+    }
 
     function updateStatus(data) {
       statusBar.className = 'status-bar';
       if (!data.wsConnected) {
         statusBar.classList.add('disconnected');
         statusText.textContent = 'Disconnected from eufy-security-ws';
+        setMode('idle');
+      } else if (data.captchaPending) {
+        statusBar.classList.add('pending');
+        statusText.textContent = 'Captcha verification required';
+        if (currentMode !== 'captcha') {
+          setMode('captcha', data);
+        } else if (data.captchaImage && captchaImg.src !== data.captchaImage) {
+          captchaImg.src = data.captchaImage;
+        }
       } else if (data.tfaPending) {
         statusBar.classList.add('pending');
         statusText.textContent = 'Verification code required';
+        if (currentMode !== 'tfa') {
+          setMode('tfa');
+        }
       } else {
         statusBar.classList.add('idle');
-        statusText.textContent = 'Connected — no code needed';
+        statusText.textContent = 'Connected — no verification needed';
+        if (currentMode !== 'idle') {
+          setMode('idle');
+        }
       }
     }
 
@@ -256,25 +339,24 @@
         const data = await res.json();
         updateStatus(data);
       } catch {
-        updateStatus({ wsConnected: false, tfaPending: false });
+        updateStatus({ wsConnected: false, tfaPending: false, captchaPending: false });
       }
     }
 
     pollStatus();
     setInterval(pollStatus, 3000);
 
-    form.addEventListener('submit', async (e) => {
+    tfaForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const code = input.value.trim();
+      const code = tfaInput.value.trim();
       if (!code || code.length < 4) {
         showFeedback('Please enter a valid 4-6 digit code.', 'error');
         return;
       }
 
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span>Verifying...';
-      feedback.className = 'feedback';
-      feedback.style.display = 'none';
+      tfaBtn.disabled = true;
+      tfaBtn.innerHTML = '<span class="spinner"></span>Verifying...';
+      hideFeedback();
 
       try {
         const res = await fetch('/verify', {
@@ -286,7 +368,7 @@
 
         if (data.success) {
           showFeedback('Verification successful! Authentication complete.', 'success');
-          input.value = '';
+          tfaInput.value = '';
           pollStatus();
         } else {
           showFeedback(data.error || 'Verification failed. Please try again.', 'error');
@@ -294,8 +376,43 @@
       } catch (err) {
         showFeedback('Network error. Please check your connection.', 'error');
       } finally {
-        btn.disabled = false;
-        btn.textContent = 'Verify Code';
+        tfaBtn.disabled = false;
+        tfaBtn.textContent = 'Verify Code';
+      }
+    });
+
+    captchaForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = captchaInput.value.trim();
+      if (!code) {
+        showFeedback('Please enter the captcha text.', 'error');
+        return;
+      }
+
+      captchaBtn.disabled = true;
+      captchaBtn.innerHTML = '<span class="spinner"></span>Submitting...';
+      hideFeedback();
+
+      try {
+        const res = await fetch('/captcha', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showFeedback('Captcha accepted! Continuing authentication...', 'success');
+          captchaInput.value = '';
+          pollStatus();
+        } else {
+          showFeedback(data.error || 'Captcha rejected. Please try again.', 'error');
+        }
+      } catch (err) {
+        showFeedback('Network error. Please check your connection.', 'error');
+      } finally {
+        captchaBtn.disabled = false;
+        captchaBtn.textContent = 'Submit Captcha';
       }
     });
 
@@ -304,7 +421,10 @@
       feedback.className = `feedback ${type}`;
     }
 
-    input.focus();
+    function hideFeedback() {
+      feedback.className = 'feedback';
+      feedback.style.display = 'none';
+    }
   </script>
 </body>
 </html>

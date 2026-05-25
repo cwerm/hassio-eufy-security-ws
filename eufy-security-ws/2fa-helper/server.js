@@ -11,6 +11,9 @@ const HTTP_PORT = parseInt(process.env.TFA_HTTP_PORT || "3001", 10);
 const WS_HOST = process.env.EUFY_WS_HOST || "127.0.0.1";
 
 let tfaPending = false;
+let captchaPending = false;
+let captchaId = null;
+let captchaImage = null;
 let wsConnected = false;
 let ws = null;
 let messageId = 0;
@@ -46,11 +49,23 @@ function connectWebSocket() {
 
       if (msg.type === "event" && msg.event?.event === "verify code") {
         tfaPending = true;
+        captchaPending = false;
         console.log("[2fa-helper] 2FA verification code requested");
+      }
+
+      if (msg.type === "event" && msg.event?.event === "captcha request") {
+        captchaPending = true;
+        tfaPending = false;
+        captchaId = msg.event.captchaId;
+        captchaImage = msg.event.captcha;
+        console.log(`[2fa-helper] Captcha requested (id: ${captchaId})`);
       }
 
       if (msg.type === "event" && msg.event?.event === "connected") {
         tfaPending = false;
+        captchaPending = false;
+        captchaId = null;
+        captchaImage = null;
         console.log("[2fa-helper] Driver connected successfully");
       }
 
@@ -59,13 +74,6 @@ function connectWebSocket() {
         if (resolve) {
           pendingResolves.delete(msg.messageId);
           resolve(msg);
-        }
-
-        if (
-          msg.messageId.startsWith("helper-listen-") &&
-          msg.result?.state?.driver?.connected === false
-        ) {
-          // Check if tfa was already pending from state
         }
       }
     } catch (e) {
@@ -90,17 +98,17 @@ function sendWsMessage(msg) {
   }
 }
 
-function sendVerifyCode(code) {
+function sendCommand(command, extraFields) {
   return new Promise((resolve, reject) => {
     if (!wsConnected) {
       reject(new Error("Not connected to eufy-security-ws"));
       return;
     }
 
-    const msgId = `helper-verify-${messageId++}`;
+    const msgId = `helper-cmd-${messageId++}`;
     const timeout = setTimeout(() => {
       pendingResolves.delete(msgId);
-      reject(new Error("Timeout waiting for verification response"));
+      reject(new Error("Timeout waiting for response"));
     }, 30000);
 
     pendingResolves.set(msgId, (result) => {
@@ -108,11 +116,7 @@ function sendVerifyCode(code) {
       resolve(result);
     });
 
-    sendWsMessage({
-      command: "driver.set_verify_code",
-      messageId: msgId,
-      verifyCode: code,
-    });
+    sendWsMessage({ command, messageId: msgId, ...extraFields });
   });
 }
 
@@ -150,7 +154,12 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "GET" && req.url === "/status") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ tfaPending, wsConnected }));
+    res.end(JSON.stringify({
+      tfaPending,
+      captchaPending,
+      captchaImage: captchaPending ? captchaImage : null,
+      wsConnected,
+    }));
     return;
   }
 
@@ -171,7 +180,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      const result = await sendVerifyCode(code);
+      const result = await sendCommand("driver.set_verify_code", { verifyCode: code });
       tfaPending = false;
 
       if (result.success) {
@@ -188,12 +197,52 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "POST" && req.url === "/captcha") {
+    try {
+      const body = await parseBody(req);
+      const code = body.code;
+
+      if (!code || code.trim().length === 0) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, error: "Captcha answer is required." }));
+        return;
+      }
+
+      if (!wsConnected) {
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, error: "Not connected to eufy-security-ws. Please wait." }));
+        return;
+      }
+
+      const result = await sendCommand("driver.set_captcha", {
+        captchaId: captchaId,
+        captcha: code.trim(),
+      });
+
+      captchaPending = false;
+      captchaId = null;
+      captchaImage = null;
+
+      if (result.success) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true, message: "Captcha accepted." }));
+      } else {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, error: "Captcha rejected. A new one may be requested." }));
+      }
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
+    return;
+  }
+
   res.writeHead(404, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ error: "Not found" }));
 });
 
 server.listen(HTTP_PORT, "0.0.0.0", () => {
   console.log(`[2fa-helper] HTTP server listening on port ${HTTP_PORT}`);
-  console.log(`[2fa-helper] Open http://<your-ha-ip>:${HTTP_PORT} to enter 2FA code`);
+  console.log(`[2fa-helper] Open http://<your-ha-ip>:${HTTP_PORT} to enter 2FA code or captcha`);
   connectWebSocket();
 });
