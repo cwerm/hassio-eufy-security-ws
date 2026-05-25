@@ -13,9 +13,9 @@ RUN \
     && npm install --force \
     "eufy-security-ws@${EUFY_SECURITY_WS_VERSION}"
 
-COPY 2fa-helper /usr/src/2fa-helper
-WORKDIR /usr/src/2fa-helper
-RUN chmod -R a+rX /usr/src/2fa-helper && npm install --omit=dev
+COPY 2fa-helper /usr/src/app/2fa-helper
+WORKDIR /usr/src/app/2fa-helper
+RUN npm install --omit=dev
 
 COPY run.sh /
 RUN chmod a+x /run.sh
