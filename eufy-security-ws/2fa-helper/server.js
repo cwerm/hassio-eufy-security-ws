@@ -28,13 +28,13 @@ function connectWebSocket() {
     wsConnected = true;
     console.log("[2fa-helper] Connected to eufy-security-ws");
     sendWsMessage({
-      command: "server.set_api_schema",
+      command: "set_api_schema",
       messageId: `helper-schema-${messageId++}`,
       schemaVersion: 21,
     });
     setTimeout(() => {
       sendWsMessage({
-        command: "server.start_listening",
+        command: "start_listening",
         messageId: `helper-listen-${messageId++}`,
       });
     }, 500);
