@@ -1,6 +1,6 @@
 name: eufy-security-ws
 description: Allows you to control Eufy security devices over websocket by connecting to the Eufy cloud servers and local/remote stations
-version: 2.1.0
+version: 2.1.1
 slug: "eufy_security_ws"
 url: https://github.com/bropat/hassio-eufy-security-ws
 init: false
@@ -44,4 +44,5 @@ schema:
   stations:
     - serial_number: str
       ip_address: match(^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$)
-image: bropat/hassio-eufy-security-ws-{arch}
+# Removed pre-built image so HA builds from this fork's Dockerfile
+# image: bropat/hassio-eufy-security-ws-{arch}
