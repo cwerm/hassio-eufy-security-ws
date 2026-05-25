@@ -123,9 +123,6 @@ if bashio::config.has_value 'username' && bashio::config.has_value 'password'; t
     export EUFY_WS_PORT="${EUFY_PORT}"
     export TFA_HTTP_PORT="${TFA_PORT}"
     export EUFY_WS_HOST="127.0.0.1"
-    bashio::log.info "2FA helper v2.1.4 - checking files..."
-    ls -la /usr/src/app/2fa-helper/server.js
-    ls -la /usr/src/2fa-helper/
     bashio::log.info "Starting 2FA helper sidecar..."
     /usr/bin/node /usr/src/app/2fa-helper/server.js 2>&1 &
     TFA_PID=$!
