@@ -20,6 +20,44 @@ It bridges events and allows you to control your Eufy devices via websocket. In 
 
 See Documentation tab for more details.
 
+## 2FA Verification Support
+
+If your Eufy account has two-factor authentication (2FA) enabled, the add-on includes a built-in web UI and REST endpoint to enter your verification code during initial login.
+
+### How it works
+
+1. Start the add-on. If 2FA is required, the add-on will request a verification code from Eufy.
+2. Open `http://<your-home-assistant-ip>:3001` in your browser.
+3. The status indicator will show **"Verification code required"** when a code is pending.
+4. Enter the 6-digit code from your email/SMS and click **Verify Code**.
+5. Once accepted, the add-on completes authentication. You only need to do this once per login session.
+
+### REST API
+
+You can also submit the code programmatically:
+
+```bash
+curl -X POST http://<your-home-assistant-ip>:3001/verify \
+  -H "Content-Type: application/json" \
+  -d '{"code": "123456"}'
+```
+
+**Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Web UI for entering the 2FA code |
+| `GET` | `/status` | Returns `{ "tfaPending": bool, "wsConnected": bool }` |
+| `POST` | `/verify` | Submit a code: `{ "code": "123456" }` |
+
+### Configuration
+
+The 2FA helper runs on port **3001** by default. You can change this in the add-on configuration:
+
+```yaml
+tfa_port: 3001
+```
+
 [logo]: https://raw.githubusercontent.com/bropat/hassio-eufy-security-ws/master/eufy-security-ws/logo.png
 [docker-amd64-shield]: https://img.shields.io/docker/pulls/bropat/hassio-eufy-security-ws-amd64?label=docker%20pulls%20amd64&logo=docker
 [docker-amd64]: https://hub.docker.com/repository/docker/bropat/hassio-eufy-security-ws-amd64/general
